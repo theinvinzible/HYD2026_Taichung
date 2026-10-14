@@ -1088,6 +1088,16 @@ h3.mini .zh { text-transform: none; letter-spacing: 0.02em; }
         <p class="note">Open data from <a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0), built on the Copernicus CAMS atmospheric model. These are modelled values on a coarse grid, not readings from a monitoring station, so neighbouring districts often show similar numbers. The index is the US AQI; its bands match the colour bands of Taiwan's official AQI. For ground measurements see the Ministry of Environment's <a href="https://airtw.moenv.gov.tw/" target="_blank" rel="noopener">air quality monitoring network</a>.</p>
       </section>
 
+      <section aria-labelledby="h-traffic">
+        <h2 id="h-traffic">Live Traffic<span class="zh block" lang="zh-Hant-TW">即時路況</span></h2>
+        <p class="sub">Opens Google Maps with its traffic layer on, centred and zoomed to the part of the map you are looking at.</p>
+        <div class="btn-row">
+          <button type="button" class="btn-s" id="traffic-open">Open current view in Google Maps ↗</button>
+          <button type="button" class="btn-s" id="traffic-shuinan">Shuinan Park ↗</button>
+        </div>
+        <p class="note">Google does not allow its traffic data to be drawn on other maps, so it opens in a new tab instead of as a layer here. Green is free-flowing, orange is slow and red is heavy. The tab shows live conditions at the moment you open it.</p>
+      </section>
+
       <section aria-labelledby="h-zoning">
         <h2 id="h-zoning">Shuinan Airport Site Detailed Plan: Land Use<span class="zh block" lang="zh-Hant-TW">水湳機場原址細部計畫：土地使用面積</span></h2>
         <p class="sub" id="zoning-sub"></p>
@@ -2344,6 +2354,24 @@ h3.mini .zh { text-transform: none; letter-spacing: 0.02em; }
     }
   }
   $("#lyr-aqi").addEventListener("change", draw);
+
+  // ---------- live traffic: hand the current view to Google Maps with its traffic layer (!5m1!1e1) ----------
+  // Google's terms do not allow its traffic tiles on a non-Google map, so this is a link, not an overlay.
+  const openTraffic = (lon, lat, z) => {
+    const url = `https://www.google.com/maps/@${lat.toFixed(6)},${lon.toFixed(6)},${z.toFixed(2)}z/data=!5m1!1e1`;
+    window.open(url, "_blank", "noopener");
+  };
+  $("#traffic-open").addEventListener("click", () => {
+    const r = inner();
+    const [lon, lat] = unproj(((r.x0 + r.x1) / 2 - view.tx) / view.k, ((r.y0 + r.y1) / 2 - view.ty) / view.k);
+    // Google zoom z puts the world on 256 * 2^z px
+    const z = Math.max(3, Math.min(20, Math.log2((view.k * 2 * HALF) / 256)));
+    openTraffic(lon, lat, z);
+  });
+  $("#traffic-shuinan").addEventListener("click", () => {
+    const ref = refs.find((x) => /Airport/i.test(x.name_en));
+    openTraffic(ref ? ref.lon : 120.654, ref ? ref.lat : 24.1863, 14.5);
+  });
   $("#aqi-refresh").addEventListener("click", loadAqi);
   setInterval(loadAqi, 30 * 60 * 1000);
   loadAqi();
