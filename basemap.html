@@ -590,6 +590,21 @@ h2 .zh.block { margin-top: 3px; }
 .num, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }
 
+/* air quality (Open-Meteo, US AQI) */
+.aqi-hit { fill: transparent; cursor: pointer; }
+.aqi-dot { stroke: var(--pin-halo); stroke-width: var(--pin-halo-w); paint-order: stroke; pointer-events: none; }
+.aqi-num { font: 700 11px var(--font-mono); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.aqi-key { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin: 10px 0 0; padding: 0; list-style: none; font-size: var(--fs-xs); color: var(--ink-2); }
+.aqi-key li { display: grid; grid-template-columns: 14px 1fr; gap: 0 6px; align-items: start; }
+.aqi-key .sw { width: 14px; height: 14px; margin-top: 1px; border: 1px solid var(--ink); border-radius: var(--r-sm); }
+.aqi-key .zh { grid-column: 2; margin-left: 0; }
+.aqi-rows { display: grid; gap: 6px; margin-top: 12px; }
+.aqi-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; background: transparent; border: 1px solid var(--rule); border-radius: var(--r-sm); text-align: left; cursor: pointer; }
+.aqi-row:hover, .aqi-row:focus-visible { background: var(--field); border-color: var(--ink); }
+.aqi-row .chip-aqi { display: block; padding: 3px 0; border-radius: var(--r-sm); text-align: center; font: 700 13px var(--font-mono); }
+.aqi-row .nm { font-weight: 700; }
+.aqi-row .meta { font-size: var(--fs-xs); color: var(--ink-2); text-align: right; }
+.aqi-row .cat { display: block; font-size: var(--fs-xs); color: var(--ink-2); }
 /* legend */
 .legend { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .legend-group { margin: 6px 0 0; font: 500 10.5px var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
@@ -962,6 +977,7 @@ h3.mini .zh { text-transform: none; letter-spacing: 0.02em; }
           <g id="g-labels"></g>
           <g id="g-refs"></g>
           <g id="g-proj"></g>
+          <g id="g-aqi"></g>
         </g>
         <rect class="neatline" id="neatline"></rect>
         <g id="g-ticks"></g>
@@ -1006,6 +1022,7 @@ h3.mini .zh { text-transform: none; letter-spacing: 0.02em; }
           <label><input type="checkbox" id="lyr-plan" checked>Detailed plan<span class="zh" lang="zh-Hant-TW">細部計畫</span></label>
           <label><input type="checkbox" id="lyr-proj" checked>Major projects<span class="zh" lang="zh-Hant-TW">重大建設</span></label>
           <label><input type="checkbox" id="lyr-refs" checked>Reference points<span class="zh" lang="zh-Hant-TW">參考點</span></label>
+          <label><input type="checkbox" id="lyr-aqi" checked>Air quality (AQI)<span class="zh" lang="zh-Hant-TW">空氣品質</span></label>
         </div>
         <p class="note" id="osm-msg" hidden></p>
         <p class="note">The former Taichung City: the five old-downtown districts plus Xitun, Nantun and Beitun. Click a district in the legend to zoom to it. Village names appear as you zoom in.</p>
@@ -1060,6 +1077,15 @@ h3.mini .zh { text-transform: none; letter-spacing: 0.02em; }
         <textarea id="adj-out" hidden readonly aria-label="Overlay parameters"></textarea>
         <h3 class="mini">Reference points<span class="zh" lang="zh-Hant-TW">參考點</span></h3>
         <ul class="refs" id="refs-list"></ul>
+      </section>
+
+      <section aria-labelledby="h-aqi">
+        <h2 id="h-aqi">Air Quality<span class="zh block" lang="zh-Hant-TW">空氣品質（AQI）</span></h2>
+        <p class="sub" id="aqi-sub" role="status">Loading current air quality…</p>
+        <ul class="aqi-key" id="aqi-key"></ul>
+        <div class="aqi-rows" id="aqi-rows"></div>
+        <div class="btn-row"><button type="button" class="btn-s" id="aqi-refresh">Refresh</button></div>
+        <p class="note">Open data from <a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0), built on the Copernicus CAMS atmospheric model. These are modelled values on a coarse grid, not readings from a monitoring station, so neighbouring districts often show similar numbers. The index is the US AQI; its bands match the colour bands of Taiwan's official AQI. For ground measurements see the Ministry of Environment's <a href="https://airtw.moenv.gov.tw/" target="_blank" rel="noopener">air quality monitoring network</a>.</p>
       </section>
 
       <section aria-labelledby="h-zoning">
@@ -1322,6 +1348,7 @@ h3.mini .zh { text-transform: none; letter-spacing: 0.02em; }
     drawRoadLabels();
     drawRefs();
     drawProjects();
+    drawAqi();
     drawTicks();
     drawScale();
     if (layers.osm) {
@@ -1655,12 +1682,14 @@ h3.mini .zh { text-transform: none; letter-spacing: 0.02em; }
     updateCoord(p);
     const ref = e.target.__ref || null;
     const pj = e.target.__proj || null;
-    const v = ref || pj || aligning ? null : e.target.__v || null;
+    const aq = e.target.__aqi || null;
+    const v = ref || pj || aq || aligning ? null : e.target.__v || null;
     setHot(v);
     if (!pj) showFoot(selProject);
     if (e.pointerType === "touch") hideTip();
     else if (pj) showProjTip(pj, e.clientX, e.clientY);
     else if (ref) showRefTip(ref, e.clientX, e.clientY);
+    else if (aq) showAqiTip(aq, e.clientX, e.clientY);
     else if (v) showVillageTip(v, e.clientX, e.clientY);
     else hideTip();
   });
@@ -1676,6 +1705,8 @@ h3.mini .zh { text-transform: none; letter-spacing: 0.02em; }
         if (selProject) showProjTip(pr, e.clientX, e.clientY);
       } else if (drag.target && drag.target.__ref) {
         showRefTip(drag.target.__ref, e.clientX, e.clientY);
+      } else if (drag.target && drag.target.__aqi) {
+        showAqiTip(drag.target.__aqi, e.clientX, e.clientY);
       } else {
         const v = drag.target && drag.target.__v;
         select(v && v !== selected ? v : null);
@@ -2206,6 +2237,116 @@ h3.mini .zh { text-transform: none; letter-spacing: 0.02em; }
     }
   }
   $("#lyr-proj").addEventListener("change", draw);
+
+  // ---------- air quality (Open-Meteo Air Quality API: free, no key, CC BY 4.0) ----------
+  // One request for the label point of each district. Current US AQI plus the main pollutants,
+  // refreshed on load, every 30 minutes and on demand. Nothing is stored.
+  const AQI_BANDS = [
+    { max: 50,  range: "0–50",    en: "Good",                           zh: "良好",           color: "#00e400", ink: "#1c1c1c" },
+    { max: 100, range: "51–100",  en: "Moderate",                       zh: "普通",           color: "#ffff00", ink: "#1c1c1c" },
+    { max: 150, range: "101–150", en: "Unhealthy for sensitive groups", zh: "對敏感族群不健康", color: "#ff7e00", ink: "#1c1c1c" },
+    { max: 200, range: "151–200", en: "Unhealthy",                      zh: "對所有族群不健康", color: "#ff0000", ink: "#ffffff" },
+    { max: 300, range: "201–300", en: "Very unhealthy",                 zh: "非常不健康",       color: "#8f3f97", ink: "#ffffff" },
+    { max: Infinity, range: "301+", en: "Hazardous",                    zh: "危害",           color: "#7e0023", ink: "#ffffff" },
+  ];
+  const aqiBand = (v) => AQI_BANDS.find((b) => v <= b.max);
+  $("#aqi-key").innerHTML = AQI_BANDS.map((b) =>
+    `<li><span class="sw" style="background:${b.color}"></span><span><b class="num">${b.range}</b> ${esc(b.en)}</span>${zh(b.zh)}</li>`).join("");
+
+  const gAqi = $("#g-aqi"), aqiSub = $("#aqi-sub"), aqiRows = $("#aqi-rows");
+  for (const d of districts) {
+    d.aqi = null;
+    d.aqiG = svgEl("g", { class: "aqi-g" }, gAqi);
+    const hit = svgEl("circle", { class: "aqi-hit", r: 15 }, d.aqiG);
+    d.aqiDot = svgEl("circle", { class: "aqi-dot", r: 13 }, d.aqiG);
+    d.aqiNum = svgEl("text", { class: "aqi-num" }, d.aqiG);
+    hit.__aqi = d;
+  }
+  function drawAqi() {
+    const show = $("#lyr-aqi").checked;
+    gAqi.style.display = show ? "" : "none";
+    if (!show) return;
+    for (const d of districts) {
+      d.aqiG.style.display = d.aqi ? "" : "none";
+      if (!d.aqi) continue;
+      // sits just below the district name
+      d.aqiG.setAttribute("transform", `translate(${view.k * d.lx + view.tx} ${view.k * d.ly + view.ty + 28})`);
+    }
+  }
+  const aqiLine = (a) => {
+    const f = (x, u) => (x == null ? "n/a" : `${Math.round(x * 10) / 10} ${u}`);
+    return `PM2.5 ${f(a.pm25, "µg/m³")} · PM10 ${f(a.pm10, "µg/m³")} · O₃ ${f(a.o3, "µg/m³")} · NO₂ ${f(a.no2, "µg/m³")}`;
+  };
+  function showAqiTip(d, cx, cy) {
+    const a = d.aqi;
+    if (!a) return;
+    tip.innerHTML = `<b>${esc(d.en)}</b>${zh(d.zh)}<br>US AQI <span class="num">${a.aqi}</span> · ${esc(a.band.en)}<br>` +
+      `<span class="num">${aqiLine(a)}</span><br>Open-Meteo / CAMS model, ${esc(a.time)}`;
+    placeTip(cx, cy);
+  }
+  function renderAqi() {
+    const have = districts.filter((d) => d.aqi).sort((a, b) => b.aqi.aqi - a.aqi.aqi);
+    for (const d of districts) {
+      if (!d.aqi) continue;
+      d.aqiDot.style.fill = d.aqi.band.color;
+      d.aqiNum.style.fill = d.aqi.band.ink;
+      d.aqiNum.textContent = d.aqi.aqi;
+    }
+    aqiRows.innerHTML = have.map((d) => `
+      <button type="button" class="aqi-row" data-i="${d.i}" aria-label="Zoom to ${esc(d.en)}, AQI ${d.aqi.aqi}, ${esc(d.aqi.band.en)}">
+        <span class="chip-aqi" style="background:${d.aqi.band.color};color:${d.aqi.band.ink}">${d.aqi.aqi}</span>
+        <span><span class="nm">${esc(d.en)}</span>${zh(d.zh)}<span class="cat">${esc(d.aqi.band.en)}</span></span>
+        <span class="meta num">PM2.5 ${d.aqi.pm25 == null ? "n/a" : Math.round(d.aqi.pm25 * 10) / 10}<br>PM10 ${d.aqi.pm10 == null ? "n/a" : Math.round(d.aqi.pm10 * 10) / 10}</span>
+      </button>`).join("");
+    for (const b of aqiRows.querySelectorAll("button")) {
+      b.addEventListener("click", () => {
+        const d = districts[+b.dataset.i];
+        interacted = true;
+        setView(fitView(d.box, 24), true);
+      });
+    }
+    draw();
+  }
+  let aqiBusy = false;
+  async function loadAqi() {
+    if (aqiBusy) return;
+    aqiBusy = true;
+    aqiSub.textContent = "Loading current air quality…";
+    try {
+      const u = new URL("https://air-quality-api.open-meteo.com/v1/air-quality");
+      u.searchParams.set("latitude", districts.map((d) => +d.p.label_lat).join(","));
+      u.searchParams.set("longitude", districts.map((d) => +d.p.label_lon).join(","));
+      u.searchParams.set("current", "us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide");
+      u.searchParams.set("timezone", "Asia/Taipei");
+      const res = await fetch(u, { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      let data = await res.json();
+      if (!Array.isArray(data)) data = [data];
+      let latest = "";
+      districts.forEach((d, i) => {
+        const c = data[i] && data[i].current;
+        if (!c || c.us_aqi == null) { d.aqi = null; return; }
+        const aqi = Math.round(c.us_aqi);
+        d.aqi = { aqi, band: aqiBand(aqi), pm25: c.pm2_5, pm10: c.pm10, o3: c.ozone, no2: c.nitrogen_dioxide, so2: c.sulphur_dioxide, co: c.carbon_monoxide,
+                  time: String(c.time).replace("T", " ") + " Taiwan time" };
+        latest = d.aqi.time;
+      });
+      if (!latest) throw new Error("no values returned");
+      aqiSub.textContent = `Current US AQI by district, ${latest}. Click a district to zoom to it.`;
+      renderAqi();
+    } catch (err) {
+      for (const d of districts) d.aqi = null;
+      aqiRows.innerHTML = "";
+      aqiSub.textContent = "Air quality could not be loaded (" + (err && err.message ? err.message : "network error") + "). Check the connection and press Refresh.";
+      draw();
+    } finally {
+      aqiBusy = false;
+    }
+  }
+  $("#lyr-aqi").addEventListener("change", draw);
+  $("#aqi-refresh").addEventListener("click", loadAqi);
+  setInterval(loadAqi, 30 * 60 * 1000);
+  loadAqi();
   $("#projects").innerHTML = projects.map((p) => {
     const [cls, label] = chip[p.phase] || chip.unknown;
     const loc = p.loc
